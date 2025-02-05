@@ -5,10 +5,6 @@ export class Assignee {
 	login: string;
 }
 
-export class Milestone {
-	number: number;
-}
-
 export class Issue {
 	id: number;
 	number: number;
@@ -16,7 +12,7 @@ export class Issue {
 	authors: string[];
 	body: string;
 	state: 'open' | 'closed';
-	milestone: Milestone;
+	milestone: null | string | number;
 	labels: Label[];
 	assignees: Assignee[];
 	issue_type: string;

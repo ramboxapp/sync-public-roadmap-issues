@@ -227,7 +227,7 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 													body: issue.body,
 													state: issue.state,
 													issue_number: targetIssue.number,
-													milestone: issue.milestone.number || null,
+													milestone: issue.milestone || null,
 													labels: issue.labels.map((label) => label.name) || [''],
 													assignees: issue.assignees.map((assignee) => assignee.login) || null,
 												})
@@ -249,9 +249,9 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 													title: issue.title,
 													// body: issue.body, // TODO
 													// state: issue.state,
-													milestone: issue.milestone.number || null,
-													labels: issue.labels.map((label) => label.name) || [''],
-													assignees: issue.assignees.map((assignee) => assignee.login) || null,
+													milestone: issue.milestone,
+													labels: issue.labels.map((label) => label.name) || [],
+													assignees: issue.assignees.map((assignee) => assignee.login) || [],
 													// issue_type: 'Bug',
 												})
 												.then((response) => {
@@ -261,7 +261,7 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 														.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
 															owner: owner_source,
 															repo: repo_source,
-															issue_number: issue.number,
+															issue_number: number,
 															sub_issue_id: response.data.id,
 														})
 														.then((response) => {

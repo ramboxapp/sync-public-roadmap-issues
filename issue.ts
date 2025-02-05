@@ -11,6 +11,7 @@ export class Milestone {
 
 export class Issue {
 	id: number;
+	number: number;
 	title: string;
 	authors: string[];
 	body: string;

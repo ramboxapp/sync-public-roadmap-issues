@@ -98,10 +98,16 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 				);
 
 				// If flag for skip syncing labelled issues is set, check if issue has label of specified sync type
-				if (SKIP_SYNC_ON_LABEL && issue.labels.find((label) => label.name === SKIP_SYNC_ON_LABEL)) return;
+				if (SKIP_SYNC_ON_LABEL && issue.labels.find((label) => label.name === SKIP_SYNC_ON_LABEL)) {
+					console.log('Skipping sync for issue with label', SKIP_SYNC_ON_LABEL);
+					return;
+				}
 
 				// If flag for only syncing labelled issues is set, check if issue has label of specified sync type
-				if (ONLY_SYNC_ON_LABEL && !issue.labels.find((label) => label.name === ONLY_SYNC_ON_LABEL)) return;
+				if (ONLY_SYNC_ON_LABEL && !issue.labels.find((label) => label.name === ONLY_SYNC_ON_LABEL)) {
+					console.log('Skipping sync for issue without label', ONLY_SYNC_ON_LABEL);
+					return;
+				}
 
 				switch (process.env.GITHUB_EVENT_NAME) {
 					case 'issue_comment':
@@ -159,7 +165,7 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 										owner: owner_target,
 										repo: repo_target,
 										title: issue.title,
-										body: issue.body,
+										// body: issue.body, // TODO
 										milestone: issue.milestone.number || null,
 										labels: issue.labels.map((label) => label.name) || [''],
 										assignees: issue.assignees.map((assignee) => assignee.login) || null,
@@ -241,12 +247,12 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 													owner: owner_target,
 													repo: repo_target,
 													title: issue.title,
-													body: issue.body,
-													state: issue.state,
+													// body: issue.body, // TODO
+													// state: issue.state,
 													milestone: issue.milestone.number || null,
 													labels: issue.labels.map((label) => label.name) || [''],
 													assignees: issue.assignees.map((assignee) => assignee.login) || null,
-													issue_type: 'Bug',
+													// issue_type: 'Bug',
 												})
 												.then((response) => {
 													console.log('Created issue for lack of a match:', response.data.title);
@@ -255,7 +261,7 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 														.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
 															owner: owner_source,
 															repo: repo_source,
-															issue_number: number,
+															issue_number: issue.number,
 															sub_issue_id: response.data.id,
 														})
 														.then((response) => {

@@ -40048,7 +40048,7 @@ labelSyncer_1.LabelSyncer.syncLabels(octokit_source, octokit_target, owner_sourc
                             repo: repo_target,
                             title: issue.title,
                             // body: issue.body, // TODO
-                            milestone: issue.milestone.number || null,
+                            milestone: issue.milestone,
                             labels: issue.labels.map((label) => label.name) || [''],
                             assignees: issue.assignees.map((assignee) => assignee.login) || null,
                         })
@@ -40109,7 +40109,7 @@ labelSyncer_1.LabelSyncer.syncLabels(octokit_source, octokit_target, owner_sourc
                                     body: issue.body,
                                     state: issue.state,
                                     issue_number: targetIssue.number,
-                                    milestone: issue.milestone.number || null,
+                                    milestone: issue.milestone || null,
                                     labels: issue.labels.map((label) => label.name) || [''],
                                     assignees: issue.assignees.map((assignee) => assignee.login) || null,
                                 })
@@ -40131,9 +40131,9 @@ labelSyncer_1.LabelSyncer.syncLabels(octokit_source, octokit_target, owner_sourc
                                     title: issue.title,
                                     // body: issue.body, // TODO
                                     // state: issue.state,
-                                    milestone: issue.milestone.number || null,
-                                    labels: issue.labels.map((label) => label.name) || [''],
-                                    assignees: issue.assignees.map((assignee) => assignee.login) || null,
+                                    milestone: issue.milestone,
+                                    labels: issue.labels.map((label) => label.name) || [],
+                                    assignees: issue.assignees.map((assignee) => assignee.login) || [],
                                     // issue_type: 'Bug',
                                 })
                                     .then((response) => {
@@ -40143,7 +40143,7 @@ labelSyncer_1.LabelSyncer.syncLabels(octokit_source, octokit_target, owner_sourc
                                         .request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
                                         owner: owner_source,
                                         repo: repo_source,
-                                        issue_number: issue.number,
+                                        issue_number: number,
                                         sub_issue_id: response.data.id,
                                     })
                                         .then((response) => {

@@ -166,7 +166,7 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 										repo: repo_target,
 										title: issue.title,
 										// body: issue.body, // TODO
-										milestone: issue.milestone.number || null,
+										milestone: issue.milestone,
 										labels: issue.labels.map((label) => label.name) || [''],
 										assignees: issue.assignees.map((assignee) => assignee.login) || null,
 									})

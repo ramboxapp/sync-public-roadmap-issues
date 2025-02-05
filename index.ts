@@ -78,6 +78,8 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 		const payload = require(process.env.GITHUB_EVENT_PATH as string);
 		const number = (payload.issue || payload.pull_request || payload).number;
 
+		console.log('PAYLOAD:', payload);
+
 		// retrieve issue by owner, repo and number from octokit_source
 		octokit_source
 			.request('GET /repos/{owner}/{repo}/issues/{number}', {
@@ -231,17 +233,39 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 												});
 										} else {
 											console.error('Could not find matching issue in target repo for title', issue.title);
-											// Create issue anew
+											console.log('Issue type', issue.issue_type);
+
+											// Create the issue if not existing
 											octokit_target
 												.request('POST /repos/{owner}/{repo}/issues', {
 													owner: owner_target,
 													repo: repo_target,
 													title: issue.title,
 													body: issue.body,
-													labels: issue.labels.map((label) => label.name),
+													state: issue.state,
+													milestone: issue.milestone.number || null,
+													labels: issue.labels.map((label) => label.name) || [''],
+													assignees: issue.assignees.map((assignee) => assignee.login) || null,
+													issue_type: 'Bug',
 												})
 												.then((response) => {
 													console.log('Created issue for lack of a match:', response.data.title);
+													// Link the created issue as a sub-issue of the source issue
+													octokit_target
+														.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+															owner: owner_source,
+															repo: repo_source,
+															issue_number: number,
+															sub_issue_id: response.data.id,
+														})
+														.then((response) => {
+															console.log('Added sub-issue:', response.data.title);
+														})
+														.catch((error) => {
+															let msg = 'Error adding to sub-issue:';
+															console.error(msg, error);
+															core.setFailed(msg + ' ${error}');
+														});
 												})
 												.catch((error) => {
 													let msg = 'Error creating issue for lack of a match:';

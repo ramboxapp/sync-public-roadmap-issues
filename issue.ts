@@ -19,6 +19,7 @@ export class Issue {
 	milestone: Milestone;
 	labels: Label[];
 	assignees: Assignee[];
+	issue_type: string;
 }
 
 export class IssueComment {

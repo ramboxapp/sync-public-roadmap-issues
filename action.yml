@@ -8,6 +8,9 @@ inputs:
   only_sync_on_label:
     description: 'If set, will only sync on issues with a label of this text'
     required: false
+  skip_sync_on_label:
+    description: 'If set, will skip sync on issues with a label of this text'
+    required: false
   source_repo:
     description: 'Org/Repo slug for the source repository. Will default to action launch repo if not set.'
     required: false

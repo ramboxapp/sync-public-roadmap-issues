@@ -9,10 +9,6 @@ import Label from './models/Label';
 import Assignee from './models/Assignee';
 import Issue from './models/Issue';
 
-let owner_source = '';
-let repo_source = '';
-let owner_target = '';
-let repo_target = '';
 let source_pat = core.getInput('source_pat') || process.env.GITHUB_TOKEN;
 let target_pat = core.getInput('target_pat') || source_pat;
 let source_url = core.getInput('source_url') || 'api.github.com';
@@ -20,48 +16,24 @@ let target_url = core.getInput('target_url') || source_url;
 let ONLY_SYNC_ON_LABEL: string;
 let SKIP_SYNC_ON_LABEL: string;
 
-// Determine which context we are running from
-if (process.env.CI == 'true') {
-	console.log('Reading params from actions context...');
-	// Read source and target repos
-	repo_source = core.getInput('source_repo') ? core.getInput('source_repo') : github.context.repo.owner + '/' + github.context.repo.repo;
-	owner_source = repo_source.split('/')[0];
-	repo_source = repo_source.split('/')[1];
-	repo_target = core.getInput('target_repo');
-	owner_target = repo_target.split('/')[0];
-	repo_target = repo_target.split('/')[1];
-	// Read params
-	ONLY_SYNC_ON_LABEL = core.getInput('only_sync_on_label');
-	SKIP_SYNC_ON_LABEL = core.getInput('skip_sync_on_label');
+if (process.env.GITHUB_EVENT_NAME !== 'issues') throw Error(`Unhandled event type ${process.env.GITHUB_EVENT_NAME}`);
+console.log('Reading params from actions context...');
+// Read source and target repos
+let repo_source = core.getInput('source_repo') ? core.getInput('source_repo') : github.context.repo.owner + '/' + github.context.repo.repo;
+let owner_source = repo_source.split('/')[0];
+repo_source = repo_source.split('/')[1];
+let repo_target = core.getInput('target_repo');
+let owner_target = repo_target.split('/')[0];
+repo_target = repo_target.split('/')[1];
 
-	console.log('Repos: ' + owner_source + '/' + repo_source + ' -> ' + owner_target + '/' + repo_target);
-	ONLY_SYNC_ON_LABEL && console.log('Only sync on label: ' + ONLY_SYNC_ON_LABEL);
-	SKIP_SYNC_ON_LABEL && console.log('Skip sync on label: ' + SKIP_SYNC_ON_LABEL);
-	console.log('Do not sync comments: ' + core.getBooleanInput('only_sync_main_issue'));
-} else {
-	console.log('Reading params from CLI context...');
-	// read all variables from launch parameters
-	const launchArgs = process.argv;
-	for (let i = 0; i < launchArgs.length; i++) {
-		if (launchArgs[i] === '--source_owner') {
-			owner_source = launchArgs[i + 1];
-		} else if (launchArgs[i] === '--source_repo') {
-			repo_source = launchArgs[i + 1];
-		} else if (launchArgs[i] === '--target_owner') {
-			owner_target = launchArgs[i + 1];
-		} else if (launchArgs[i] === '--target_repo') {
-			repo_target = launchArgs[i + 1];
-		} else if (launchArgs[i] === '--source_pat') {
-			source_pat = launchArgs[i + 1];
-		} else if (launchArgs[i] === '--target_pat') {
-			target_pat = launchArgs[i + 1];
-		} else if (launchArgs[i] === '--source_url') {
-			source_url = launchArgs[i + 1];
-		} else if (launchArgs[i] === '--target_url') {
-			target_url = launchArgs[i + 1];
-		}
-	}
-}
+// Read params
+ONLY_SYNC_ON_LABEL = core.getInput('only_sync_on_label');
+SKIP_SYNC_ON_LABEL = core.getInput('skip_sync_on_label');
+
+console.log('Repos: ' + owner_source + '/' + repo_source + ' -> ' + owner_target + '/' + repo_target);
+ONLY_SYNC_ON_LABEL && console.log('Only sync on label: ' + ONLY_SYNC_ON_LABEL);
+SKIP_SYNC_ON_LABEL && console.log('Skip sync on label: ' + SKIP_SYNC_ON_LABEL);
+console.log('Do not sync comments: ' + core.getBooleanInput('only_sync_main_issue'));
 
 // Init octokit for source and target
 const octokit_source = new Octokit({
@@ -107,135 +79,113 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 			return;
 		}
 
-		switch (process.env.GITHUB_EVENT_NAME) {
-			case 'issue_comment':
-				// If flag for only syncing issue bodies is set and skip if true
-				if (core.getBooleanInput('only_sync_main_issue')) return;
-				if (payload.action !== 'created') {
-					console.warn('This will only sync new comments, events of current type are ignored', payload.action);
-					return;
-				}
-				// Retrieve new comment
-				const issueComment = await octokit_source
-					.request('GET /repos/{owner}/{repo}/issues/comments/{comment_id}', {
-						owner: owner_source,
-						repo: repo_source,
-						comment_id: payload.comment.id,
-					})
-					.then((response) => response.data);
-
-				const targetIssueNumber = await IssueSyncer.getIssueNumberByTitle(octokit_target, owner_target, repo_target, issue.title);
-
-				// Transfer new comment to target issue
-				await octokit_target.request('POST /repos/{owner}/{repo}/issues/{issue_number}/comments', {
+		// If the issue was updated, we need to sync labels
+		switch (payload.action) {
+			case 'opened':
+				// Create new issue in target repo
+				const { data: createdIssue } = await octokit_target.request('POST /repos/{owner}/{repo}/issues', {
 					owner: owner_target,
 					repo: repo_target,
-					issue_number: targetIssueNumber,
-					body: issueComment.body || '',
+					title: issue.title,
+					// body: issue.body, // TODO
+					state: issue.state,
+					milestone: issue.milestone.id,
+					labels: issue.labels.map((label: Label) => label.name) || [''],
+					assignees: issue.assignees.map((assignee: Assignee) => assignee.login) || null,
 				});
-				console.info('Successfully created new comment on issue');
+
+				await octokit_target.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+					owner: owner_source,
+					repo: repo_source,
+					issue_number: issue.number,
+					sub_issue_id: createdIssue.id,
+				});
+
+				console.log('Created issue and sub-issue:', createdIssue.title);
 				break;
 
-			case 'issues':
-				// If the issue was updated, we need to sync labels
-				switch (payload.action) {
-					case 'opened':
-						// Create new issue in target repo
-						const { data: createdIssue } = await octokit_target.request('POST /repos/{owner}/{repo}/issues', {
-							owner: owner_target,
-							repo: repo_target,
-							title: issue.title,
-							body: issue.body,
-							milestone: issue.milestone.id,
-							labels: issue.labels.map((label: Label) => label.name) || [''],
-							assignees: issue.assignees.map((assignee: Assignee) => assignee.login) || null,
-						});
+			case 'edited':
+			case 'closed':
+			case 'reopened':
+			case 'assigned':
+			case 'unassigned':
+			case 'labeled':
+			case 'unlabeled':
+			case 'milestoned':
+			case 'demilestoned':
+				// Find issue number from target repo where the issue title matches the title of the issue in the source repo
+				const { data: targetIssues } = await octokit_target.request('GET /repos/{owner}/{repo}/issues', {
+					owner: owner_target,
+					repo: repo_target,
+					filter: 'all',
+					state: 'all',
+				});
+				const targetIssue = targetIssues.find((targetIssue) => targetIssue.title === issue.title);
 
-						await octokit_target.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
-							owner: owner_source,
-							repo: repo_source,
-							issue_number: issue.number,
-							sub_issue_id: createdIssue.id,
-						});
-
-						console.log('Created issue and sub-issue:', createdIssue.title);
+				if (payload.action === 'demilestoned' || issue.milestone === null) {
+					if (!targetIssue) {
+						console.log('Issue is not assigned to a milestone, skipping...');
 						break;
-
-					case 'edited':
-					case 'closed':
-					case 'reopened':
-					case 'assigned':
-					case 'unassigned':
-					case 'labeled':
-					case 'unlabeled':
-					case 'milestoned':
-					case 'demilestoned':
-						// Find issue number from target repo where the issue title matches the title of the issue in the source repo
-						const { data: targetIssues } = await octokit_target.request('GET /repos/{owner}/{repo}/issues', {
-							owner: owner_target,
-							repo: repo_target,
-							filter: 'all',
-							state: 'all',
-						});
-						const targetIssue = targetIssues.find((targetIssue) => targetIssue.title === issue.title);
-
-						// Find milestone id from target repo
-						console.log('Searching for target milestone:', issue.milestone.title);
-						const { data: targetMilestones } = await octokit_target.request('GET /repos/{owner}/{repo}/milestones', {
-							owner: owner_target,
-							repo: repo_target,
-							state: 'all',
-						});
-						const targetMilestone = targetMilestones.find((targetMilestone) => targetMilestone.title === issue.milestone.title);
-
-						console.log('Found target milestone:', targetMilestone);
-
-						// If no issue was found, create a new one
-						if (!targetIssue) {
-							console.error('Could not find issue in target repo, lets create it...');
-							const { data: createdIssue } = await octokit_target.request('POST /repos/{owner}/{repo}/issues', {
-								owner: owner_target,
-								repo: repo_target,
-								title: issue.title,
-								// body: issue.body, // TODO
-								state: issue.state,
-								milestone: targetMilestone?.number,
-								labels: issue.labels.map((label: Label) => label.name) || [],
-								assignees: issue.assignees.map((assignee: Assignee) => assignee.login) || [],
-							});
-							// Link the created issue as a sub-issue of the source issue
-							await octokit_target.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
-								owner: owner_source,
-								repo: repo_source,
-								issue_number: number,
-								sub_issue_id: createdIssue.id,
-							});
-							break;
+					}
+					await octokit_target.graphql(`mutation {
+						deleteIssue(input: {issueId: "${targetIssue.node_id}"}) {
+							clientMutationId
 						}
-
-						// Update issue in target repo
-						await octokit_target.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', {
-							owner: owner_target,
-							repo: repo_target,
-							issue_number: targetIssue.number,
-							title: issue.title,
-							body: issue.body,
-							state: issue.state,
-							milestone: targetMilestone?.number,
-							labels: issue.labels.map((label: Label) => label.name) || [''],
-							assignees: issue.assignees.map((assignee: Assignee) => assignee.login) || null,
-						});
-						console.log('Updated issue:', targetIssue.title);
-						break;
-
-					default:
-						console.log('We are currently not handling events of type ' + payload.action);
-						break;
+					}`);
+					break;
 				}
+
+				// Find milestone id from target repo
+				console.log('Searching for target milestone:', issue.milestone.title);
+				const { data: targetMilestones } = await octokit_target.request('GET /repos/{owner}/{repo}/milestones', {
+					owner: owner_target,
+					repo: repo_target,
+					state: 'all',
+				});
+				const targetMilestone = targetMilestones.find((targetMilestone) => targetMilestone.title === issue.milestone.title);
+
+				console.log('Found target milestone:', targetMilestone.title);
+
+				// If no issue was found, create a new one
+				if (!targetIssue) {
+					console.error('Could not find issue in target repo, lets create it...');
+					const { data: createdIssue } = await octokit_target.request('POST /repos/{owner}/{repo}/issues', {
+						owner: owner_target,
+						repo: repo_target,
+						title: issue.title,
+						// body: issue.body, // TODO
+						state: issue.state,
+						milestone: targetMilestone?.number,
+						labels: issue.labels.map((label: Label) => label.name) || [],
+						assignees: issue.assignees.map((assignee: Assignee) => assignee.login) || [],
+					});
+					// Link the created issue as a sub-issue of the source issue
+					await octokit_target.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+						owner: owner_source,
+						repo: repo_source,
+						issue_number: number,
+						sub_issue_id: createdIssue.id,
+					});
+					break;
+				}
+
+				// Update issue in target repo
+				await octokit_target.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', {
+					owner: owner_target,
+					repo: repo_target,
+					issue_number: targetIssue.number,
+					title: issue.title,
+					body: issue.body,
+					state: issue.state,
+					milestone: targetMilestone?.number,
+					labels: issue.labels.map((label: Label) => label.name) || [''],
+					assignees: issue.assignees.map((assignee: Assignee) => assignee.login) || null,
+				});
+				console.log('Updated issue:', targetIssue.title);
 				break;
 
 			default:
-				console.log('Unhandled event type:', process.env.GITHUB_EVENT_NAME);
+				console.log('We are currently not handling events of type ' + payload.action);
 				break;
 		}
 	});

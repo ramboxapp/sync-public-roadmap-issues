@@ -127,6 +127,7 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 						console.log('Issue is not assigned to a milestone, skipping...');
 						break;
 					}
+					console.log('Deleting issue because was moved to Backlog...');
 					await octokit_target.graphql(`mutation {
 						deleteIssue(input: {issueId: "${targetIssue.node_id}"}) {
 							clientMutationId

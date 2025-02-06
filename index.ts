@@ -180,12 +180,15 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 						const targetIssue = targetIssues.find((targetIssue) => targetIssue.title === issue.title);
 
 						// Find milestone id from target repo
+						console.log('Searching for target milestone:', issue.milestone.title);
 						const { data: targetMilestones } = await octokit_target.request('GET /repos/{owner}/{repo}/milestones', {
 							owner: owner_target,
 							repo: repo_target,
 							state: 'all',
 						});
 						const targetMilestone = targetMilestones.find((targetMilestone) => targetMilestone.title === issue.milestone.title);
+
+						console.log('Found target milestone:', targetMilestone);
 
 						// If no issue was found, create a new one
 						if (!targetIssue) {
@@ -196,7 +199,7 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 								title: issue.title,
 								// body: issue.body, // TODO
 								state: issue.state,
-								milestone: targetMilestone?.id,
+								milestone: targetMilestone?.number,
 								labels: issue.labels.map((label: Label) => label.name) || [],
 								assignees: issue.assignees.map((assignee: Assignee) => assignee.login) || [],
 							});
@@ -218,7 +221,7 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 							title: issue.title,
 							body: issue.body,
 							state: issue.state,
-							milestone: targetMilestone?.id,
+							milestone: targetMilestone?.number,
 							labels: issue.labels.map((label: Label) => label.name) || [''],
 							assignees: issue.assignees.map((assignee: Assignee) => assignee.login) || null,
 						});

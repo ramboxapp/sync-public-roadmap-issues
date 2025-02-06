@@ -40065,12 +40065,14 @@ labelSyncer_1.LabelSyncer.syncLabels(octokit_source, octokit_target, owner_sourc
                     });
                     const targetIssue = targetIssues.find((targetIssue) => targetIssue.title === issue.title);
                     // Find milestone id from target repo
+                    console.log('Searching for target milestone:', issue.milestone.title);
                     const { data: targetMilestones } = yield octokit_target.request('GET /repos/{owner}/{repo}/milestones', {
                         owner: owner_target,
                         repo: repo_target,
                         state: 'all',
                     });
                     const targetMilestone = targetMilestones.find((targetMilestone) => targetMilestone.title === issue.milestone.title);
+                    console.log('Found target milestone:', targetMilestone);
                     // If no issue was found, create a new one
                     if (!targetIssue) {
                         console.error('Could not find issue in target repo, lets create it...');
@@ -40080,7 +40082,7 @@ labelSyncer_1.LabelSyncer.syncLabels(octokit_source, octokit_target, owner_sourc
                             title: issue.title,
                             // body: issue.body, // TODO
                             state: issue.state,
-                            milestone: targetMilestone === null || targetMilestone === void 0 ? void 0 : targetMilestone.id,
+                            milestone: targetMilestone === null || targetMilestone === void 0 ? void 0 : targetMilestone.number,
                             labels: issue.labels.map((label) => label.name) || [],
                             assignees: issue.assignees.map((assignee) => assignee.login) || [],
                         });
@@ -40101,7 +40103,7 @@ labelSyncer_1.LabelSyncer.syncLabels(octokit_source, octokit_target, owner_sourc
                         title: issue.title,
                         body: issue.body,
                         state: issue.state,
-                        milestone: targetMilestone === null || targetMilestone === void 0 ? void 0 : targetMilestone.id,
+                        milestone: targetMilestone === null || targetMilestone === void 0 ? void 0 : targetMilestone.number,
                         labels: issue.labels.map((label) => label.name) || [''],
                         assignees: issue.assignees.map((assignee) => assignee.login) || null,
                     });
@@ -40249,7 +40251,7 @@ class MilestoneSyncer {
                 console.error('Failed to retrieve target repo labels', err);
             })
                 .then(() => {
-                // Filter source repo labels: remove all that from list that are already contained in target (= delta)
+                // Filter source repo milestones: remove all that from list that are already contained in target (= delta)
                 sourceRepoMilestones = sourceRepoMilestones.filter((label) => targetRepoMilestones
                     // Match by name and description, as IDs may vary across repos
                     .find((targetEntry) => targetEntry.title == label.title) == undefined);
@@ -40263,8 +40265,8 @@ class MilestoneSyncer {
                         description: element.description || '',
                         state: element.state,
                     })
-                        .then(() => 'Successfully synced label ' + element.title)
-                        .catch((err) => 'Failed to sync label ' + element.title + ': ' + err);
+                        .then(() => 'Successfully synced milestone ' + element.title)
+                        .catch((err) => 'Failed to sync milestone ' + element.title + ': ' + err);
                 })).then((results) => {
                     results.forEach((element) => console.log(element));
                 });

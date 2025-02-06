@@ -38,7 +38,7 @@ export class MilestoneSyncer {
 						console.error('Failed to retrieve target repo labels', err);
 					})
 					.then(() => {
-						// Filter source repo labels: remove all that from list that are already contained in target (= delta)
+						// Filter source repo milestones: remove all that from list that are already contained in target (= delta)
 						sourceRepoMilestones = sourceRepoMilestones.filter(
 							(label) =>
 								targetRepoMilestones
@@ -57,8 +57,8 @@ export class MilestoneSyncer {
 										description: element.description || '',
 										state: element.state,
 									})
-									.then(() => 'Successfully synced label ' + element.title)
-									.catch((err) => 'Failed to sync label ' + element.title + ': ' + err);
+									.then(() => 'Successfully synced milestone ' + element.title)
+									.catch((err) => 'Failed to sync milestone ' + element.title + ': ' + err);
 							})
 						).then((results) => {
 							results.forEach((element) => console.log(element));

@@ -227,7 +227,7 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 													body: issue.body,
 													state: issue.state,
 													issue_number: targetIssue.number,
-													milestone: issue.milestone || null,
+													milestone: 'v2.2.3',
 													labels: issue.labels.map((label) => label.name) || [''],
 													assignees: issue.assignees.map((assignee) => assignee.login) || null,
 												})
@@ -248,11 +248,10 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 													repo: repo_target,
 													title: issue.title,
 													// body: issue.body, // TODO
-													// state: issue.state,
+													state: issue.state,
 													milestone: issue.milestone,
 													labels: issue.labels.map((label) => label.name) || [],
 													assignees: issue.assignees.map((assignee) => assignee.login) || [],
-													// issue_type: 'Bug',
 												})
 												.then((response) => {
 													console.log('Created issue for lack of a match:', response.data.title);

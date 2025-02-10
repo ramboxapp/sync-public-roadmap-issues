@@ -79,6 +79,14 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 			return;
 		}
 
+		// Add "syncing" label to issue to prevent multiple syncs
+		await octokit_source.request('POST /repos/{owner}/{repo}/issues/{issue_number}/labels', {
+			owner: owner_source,
+			repo: repo_source,
+			issue_number: number,
+			labels: ['syncing'],
+		});
+
 		// If the issue was updated, we need to sync labels
 		switch (payload.action) {
 			case 'opened':
@@ -189,4 +197,12 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 				console.log('We are currently not handling events of type ' + payload.action);
 				break;
 		}
+
+		// Remove "syncing" label
+		await octokit_source.request('DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels/{name}', {
+			owner: owner_source,
+			repo: repo_source,
+			issue_number: number,
+			name: 'syncing',
+		});
 	});

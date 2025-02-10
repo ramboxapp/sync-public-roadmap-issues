@@ -5,7 +5,7 @@
 	"main": "index.ts",
 	"scripts": {
 		"build": "tsc && ncc build --source-map --license licenses.txt",
-		"test": "ts-node-dev index.ts --owner_source ramboxapp --owner_target project-management --repo_source ramboxapp --repo_target test-roadmap"
+		"test": "node --env-file=.env -r ts-node/register ./index.ts --owner_source ramboxapp --owner_target ramboxapp --repo_source project-management --repo_target test-roadmap --issue_number 606"
 	},
 	"keywords": [
 		"action"
@@ -22,5 +22,8 @@
 	},
 	"volta": {
 		"node": "20.14.0"
+	},
+	"devDependencies": {
+		"ts-node": "^10.9.2"
 	}
 }

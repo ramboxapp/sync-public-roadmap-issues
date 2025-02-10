@@ -9,31 +9,64 @@ import Label from './models/Label';
 import Assignee from './models/Assignee';
 import Issue from './models/Issue';
 
+let payload = null;
+let owner_source = '';
+let repo_source = '';
+let owner_target = '';
+let repo_target = '';
 let source_pat = core.getInput('source_pat') || process.env.GITHUB_TOKEN;
 let target_pat = core.getInput('target_pat') || source_pat;
 let source_url = core.getInput('source_url') || 'api.github.com';
 let target_url = core.getInput('target_url') || source_url;
-let ONLY_SYNC_ON_LABEL: string;
+let ONLY_SYNC_ON_LABEL: string | boolean;
 let SKIP_SYNC_ON_LABEL: string;
 
-if (process.env.GITHUB_EVENT_NAME !== 'issues') throw Error(`Unhandled event type ${process.env.GITHUB_EVENT_NAME}`);
-console.log('Reading params from actions context...');
-// Read source and target repos
-let repo_source = core.getInput('source_repo') ? core.getInput('source_repo') : github.context.repo.owner + '/' + github.context.repo.repo;
-let owner_source = repo_source.split('/')[0];
-repo_source = repo_source.split('/')[1];
-let repo_target = core.getInput('target_repo');
-let owner_target = repo_target.split('/')[0];
-repo_target = repo_target.split('/')[1];
-
-// Read params
-ONLY_SYNC_ON_LABEL = core.getInput('only_sync_on_label');
-SKIP_SYNC_ON_LABEL = core.getInput('skip_sync_on_label');
+// Determine which context we are running from
+if (process.env.CI == 'true') {
+	console.log('Reading params from actions context...');
+	// Read source and target repos
+	repo_source = core.getInput('source_repo') ? core.getInput('source_repo') : github.context.repo.owner + '/' + github.context.repo.repo;
+	owner_source = repo_source.split('/')[0];
+	repo_source = repo_source.split('/')[1];
+	repo_target = core.getInput('target_repo');
+	owner_target = repo_target.split('/')[0];
+	repo_target = repo_target.split('/')[1];
+	// Read params
+	ONLY_SYNC_ON_LABEL = core.getInput('only_sync_on_label');
+	SKIP_SYNC_ON_LABEL = core.getInput('skip_sync_on_label');
+	payload = require(process.env.GITHUB_EVENT_PATH as string);
+} else {
+	console.log('Reading params from CLI context...');
+	// read all variables from launch parameters
+	const launchArgs = process.argv;
+	for (let i = 0; i < launchArgs.length; i++) {
+		if (launchArgs[i] === '--owner_source') {
+			owner_source = launchArgs[i + 1];
+		} else if (launchArgs[i] === '--owner_target') {
+			owner_target = launchArgs[i + 1];
+		} else if (launchArgs[i] === '--repo_source') {
+			repo_source = launchArgs[i + 1];
+		} else if (launchArgs[i] === '--repo_target') {
+			repo_target = launchArgs[i + 1];
+		} else if (launchArgs[i] === '--source_pat') {
+			source_pat = launchArgs[i + 1];
+		} else if (launchArgs[i] === '--target_pat') {
+			target_pat = launchArgs[i + 1];
+		} else if (launchArgs[i] === '--source_url') {
+			source_url = launchArgs[i + 1];
+		} else if (launchArgs[i] === '--target_url') {
+			target_url = launchArgs[i + 1];
+		} else if (launchArgs[i] === '--issue_number') {
+			payload = { action: 'labeled', issue: { number: parseInt(launchArgs[i + 1]) } };
+		}
+	}
+	ONLY_SYNC_ON_LABEL = false;
+	SKIP_SYNC_ON_LABEL = 'private';
+}
 
 console.log('Repos: ' + owner_source + '/' + repo_source + ' -> ' + owner_target + '/' + repo_target);
 ONLY_SYNC_ON_LABEL && console.log('Only sync on label: ' + ONLY_SYNC_ON_LABEL);
 SKIP_SYNC_ON_LABEL && console.log('Skip sync on label: ' + SKIP_SYNC_ON_LABEL);
-console.log('Do not sync comments: ' + core.getBooleanInput('only_sync_main_issue'));
 
 // Init octokit for source and target
 const octokit_source = new Octokit({
@@ -51,21 +84,14 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 	.then(() => MilestoneSyncer.syncMilestones(octokit_source, octokit_target, owner_source, repo_source, owner_target, repo_target))
 	.then(() => console.log('Successfully synced milestones'))
 	.then(async () => {
-		const payload = require(process.env.GITHUB_EVENT_PATH as string);
 		const number = (payload.issue || payload.pull_request || payload).number;
 
-		// retrieve issue by owner, repo and number from octokit_source
+		// Retrieve issue by owner, repo and number from octokit_source
 		const { data: issue }: { data: Issue } = await octokit_source.request('GET /repos/{owner}/{repo}/issues/{number}', {
 			owner: owner_source,
 			repo: repo_source,
 			number: number,
 		});
-
-		console.log('Found issue:', issue.title);
-		console.log(
-			'Labels:',
-			issue.labels.map((label: Label) => label.name)
-		);
 
 		// If flag for skip syncing labelled issues is set, check if issue has label of specified sync type
 		if (SKIP_SYNC_ON_LABEL && issue.labels.find((label: Label) => label.name === SKIP_SYNC_ON_LABEL)) {
@@ -121,14 +147,13 @@ LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source
 			case 'unlabeled':
 			case 'milestoned':
 			case 'demilestoned':
-				// Find issue number from target repo where the issue title matches the title of the issue in the source repo
-				const { data: targetIssues } = await octokit_target.request('GET /repos/{owner}/{repo}/issues', {
-					owner: owner_target,
-					repo: repo_target,
-					filter: 'all',
-					state: 'all',
+				// Find issue number from target repo by sub-issue id
+				const { data: targetIssues } = await octokit_target.request('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+					owner: owner_source,
+					repo: repo_source,
+					issue_number: number,
 				});
-				const targetIssue = targetIssues.find((targetIssue) => targetIssue.title === issue.title);
+				const targetIssue = targetIssues[0] || null;
 
 				if (payload.action === 'demilestoned' || issue.milestone === null) {
 					if (!targetIssue) {

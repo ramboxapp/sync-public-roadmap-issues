@@ -148,7 +148,9 @@ const octokit_target = new Octokit({
 							// body: issue.body, // TODO
 							state: issue.state,
 							milestone: targetMilestone.number,
-							labels: issue.labels.map((label: Label) => label.name) || [''],
+							labels: issue.labels.filter((label: Label) => label.name !== 'to-sync').map((label: Label) => label.name) || [
+								'',
+							],
 							assignees: issue.assignees.map((assignee: Assignee) => assignee.login) || null,
 						});
 

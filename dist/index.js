@@ -40040,7 +40040,9 @@ const octokit_target = new octokit_1.Octokit({
                             // body: issue.body, // TODO
                             state: issue.state,
                             milestone: targetMilestone.number,
-                            labels: issue.labels.map((label) => label.name) || [''],
+                            labels: issue.labels.filter((label) => label.name !== 'to-sync').map((label) => label.name) || [
+                                '',
+                            ],
                             assignees: issue.assignees.map((assignee) => assignee.login) || null,
                         });
                         yield octokit_source.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {

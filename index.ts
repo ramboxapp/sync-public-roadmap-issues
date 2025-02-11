@@ -187,7 +187,7 @@ const octokit_target = new Octokit({
 				console.log('Issue found:', issue.title);
 
 				// Remove the target issue if the source issue was demilestoned or has no milestone
-				if (payload.action === 'demilestoned' || issue.milestone === null) {
+				if (payload.action === 'deleted' || payload.action === 'demilestoned' || issue.milestone === null) {
 					// Find issue number from target repo by sub-issue id
 					const { data: targetIssues } = await octokit_target.request(
 						'GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues',

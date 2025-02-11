@@ -79,155 +79,159 @@ const octokit_target = new Octokit({
 	baseUrl: `https://${target_url}`,
 });
 
-LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source, owner_target, repo_target)
-	.then(() => console.log('Successfully synced labels'))
-	.then(() => MilestoneSyncer.syncMilestones(octokit_source, octokit_target, owner_source, repo_source, owner_target, repo_target))
-	.then(() => console.log('Successfully synced milestones'))
-	.then(async () => {
-		const number = (payload.issue || payload.pull_request || payload).number;
+console.log(process.env);
 
-		// Retrieve issue by owner, repo and number from octokit_source
-		const { data: issue }: { data: Issue } = await octokit_source.request('GET /repos/{owner}/{repo}/issues/{number}', {
-			owner: owner_source,
-			repo: repo_source,
-			number: number,
-		});
-
-		// If flag for skip syncing labelled issues is set, check if issue has label of specified sync type
-		if (SKIP_SYNC_ON_LABEL && issue.labels.find((label: Label) => label.name === SKIP_SYNC_ON_LABEL)) {
-			console.log('Skipping sync for issue with label', SKIP_SYNC_ON_LABEL);
-			return;
-		}
-
-		// If flag for only syncing labelled issues is set, check if issue has label of specified sync type
-		if (ONLY_SYNC_ON_LABEL && !issue.labels.find((label: Label) => label.name === ONLY_SYNC_ON_LABEL)) {
-			console.log('Skipping sync for issue without label', ONLY_SYNC_ON_LABEL);
-			return;
-		}
-
-		// Add "syncing" label to issue to prevent multiple syncs
-		await octokit_source.request('POST /repos/{owner}/{repo}/issues/{issue_number}/labels', {
-			owner: owner_source,
-			repo: repo_source,
-			issue_number: number,
-			labels: ['syncing'],
-		});
+(async () => {
+	try {
+		await LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source, owner_target, repo_target);
+		console.log('Successfully synced labels');
+		await MilestoneSyncer.syncMilestones(octokit_source, octokit_target, owner_source, repo_source, owner_target, repo_target);
+		console.log('Successfully synced milestones');
 
 		// If the issue was updated, we need to sync labels
-		switch (payload.action) {
-			case 'opened':
-				// Create new issue in target repo
-				const { data: createdIssue } = await octokit_target.request('POST /repos/{owner}/{repo}/issues', {
-					owner: owner_target,
-					repo: repo_target,
-					title: issue.title,
-					// body: issue.body, // TODO
-					state: issue.state,
-					milestone: issue.milestone.id,
-					labels: issue.labels.map((label: Label) => label.name) || [''],
-					assignees: issue.assignees.map((assignee: Assignee) => assignee.login) || null,
+		switch (process.env.GITHUB_EVENT_NAME) {
+			case 'workflow_dispatch':
+			case 'schedule':
+				// Retrieve issue by owner, repo and number from octokit_source
+				const search = await octokit_source.paginate('GET /repos/{owner}/{repo}/issues', {
+					owner: 'ramboxapp',
+					repo: 'project-management',
+					per_page: 100,
+					milestone: '*',
+					labels: 'to-sync',
+					sort: 'updated',
+					direction: 'desc',
 				});
-
-				await octokit_target.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
-					owner: owner_source,
-					repo: repo_source,
-					issue_number: issue.number,
-					sub_issue_id: createdIssue.id,
-				});
-
-				console.log('Created issue and sub-issue:', createdIssue.title);
-				break;
-
-			case 'edited':
-			case 'closed':
-			case 'reopened':
-			case 'assigned':
-			case 'unassigned':
-			case 'labeled':
-			case 'unlabeled':
-			case 'milestoned':
-			case 'demilestoned':
-				// Find issue number from target repo by sub-issue id
-				const { data: targetIssues } = await octokit_target.request('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
-					owner: owner_source,
-					repo: repo_source,
-					issue_number: number,
-				});
-				const targetIssue = targetIssues[0] || null;
-
-				if (payload.action === 'demilestoned' || issue.milestone === null) {
-					if (!targetIssue) {
-						console.log('Issue is not assigned to a milestone, skipping...');
-						break;
-					}
-					console.log('Deleting issue because was moved to Backlog...');
-					await octokit_target.graphql(`mutation {
-						deleteIssue(input: {issueId: "${targetIssue.node_id}"}) {
-							clientMutationId
-						}
-					}`);
-					break;
-				}
 
 				// Find milestone id from target repo
-				console.log('Searching for target milestone:', issue.milestone.title);
 				const { data: targetMilestones } = await octokit_target.request('GET /repos/{owner}/{repo}/milestones', {
 					owner: owner_target,
 					repo: repo_target,
 					state: 'all',
 				});
-				const targetMilestone = targetMilestones.find((targetMilestone) => targetMilestone.title === issue.milestone.title);
 
-				console.log('Found target milestone:', targetMilestone.title);
+				for (const issue of search) {
+					const targetMilestone = targetMilestones.find((targetMilestone) => targetMilestone.title === issue.milestone.title);
 
-				// If no issue was found, create a new one
-				if (!targetIssue) {
-					console.error('Could not find issue in target repo, lets create it...');
-					const { data: createdIssue } = await octokit_target.request('POST /repos/{owner}/{repo}/issues', {
-						owner: owner_target,
-						repo: repo_target,
-						title: issue.title,
-						// body: issue.body, // TODO
-						state: issue.state,
-						milestone: targetMilestone?.number,
-						labels: issue.labels.map((label: Label) => label.name) || [],
-						assignees: issue.assignees.map((assignee: Assignee) => assignee.login) || [],
-					});
-					// Link the created issue as a sub-issue of the source issue
-					await octokit_target.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+					// Find issue number from target repo by sub-issue id
+					const { data: targetIssues } = await octokit_target.request(
+						'GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues',
+						{
+							owner: owner_source,
+							repo: repo_source,
+							issue_number: issue.number,
+						}
+					);
+					const targetIssue = targetIssues[0] || null;
+
+					if (targetIssue) {
+						// Update issue in target repo
+						await octokit_target.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', {
+							owner: owner_target,
+							repo: repo_target,
+							issue_number: targetIssue.number,
+							title: issue.title,
+							body: issue.body,
+							// state: issue.state,
+							milestone: targetMilestone?.number,
+							labels: issue.labels.map((label: Label) => label.name) || [''],
+							assignees: issue.assignees.map((assignee: Assignee) => assignee.login) || null,
+						});
+						console.log('Updated issue:', targetIssue.title);
+					} else {
+						// Create new issue in target repo
+						const { data: createdIssue } = await octokit_target.request('POST /repos/{owner}/{repo}/issues', {
+							owner: owner_target,
+							repo: repo_target,
+							title: issue.title,
+							// body: issue.body, // TODO
+							state: issue.state,
+							milestone: targetMilestone.number,
+							labels: issue.labels.map((label: Label) => label.name) || [''],
+							assignees: issue.assignees.map((assignee: Assignee) => assignee.login) || null,
+						});
+
+						await octokit_source.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+							owner: owner_source,
+							repo: repo_source,
+							issue_number: issue.number,
+							sub_issue_id: createdIssue.id,
+						});
+
+						console.log('Created issue and sub-issue:', createdIssue.title);
+					}
+
+					// Remove "to-sync" label
+					await octokit_source.request('DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels/{name}', {
 						owner: owner_source,
 						repo: repo_source,
-						issue_number: number,
-						sub_issue_id: createdIssue.id,
+						issue_number: issue.number,
+						name: 'to-sync',
 					});
+				}
+
+				break;
+			case 'issue':
+				// Retrieve issue by owner, repo and number from octokit_source
+				const number = (payload.issue || payload.pull_request || payload).number;
+				const { data: issue } = await octokit_source.request('GET /repos/{owner}/{repo}/issues/{number}', {
+					owner: owner_source,
+					repo: repo_source,
+					number: number,
+				});
+
+				// Remove the target issue if the source issue was demilestoned or has no milestone
+				if (payload.action === 'demilestoned' || issue.milestone === null) {
+					// Find issue number from target repo by sub-issue id
+					const { data: targetIssues } = await octokit_target.request(
+						'GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues',
+						{
+							owner: owner_source,
+							repo: repo_source,
+							issue_number: number,
+						}
+					);
+					const targetIssue = targetIssues[0] || null;
+					if (!targetIssue) {
+						console.log('Issue is not assigned to a milestone, skipping...');
+						break;
+					}
+					console.log('Deleting issue because was moved to Backlog...');
+					await octokit_target.graphql(`
+						mutation {
+							deleteIssue(input: { issueId: "${targetIssue.node_id}" }) {
+								clientMutationId
+							}
+						}
+					`);
 					break;
 				}
 
-				// Update issue in target repo
-				await octokit_target.request('PATCH /repos/{owner}/{repo}/issues/{issue_number}', {
-					owner: owner_target,
-					repo: repo_target,
-					issue_number: targetIssue.number,
-					title: issue.title,
-					body: issue.body,
-					state: issue.state,
-					milestone: targetMilestone?.number,
-					labels: issue.labels.map((label: Label) => label.name) || [''],
-					assignees: issue.assignees.map((assignee: Assignee) => assignee.login) || null,
-				});
-				console.log('Updated issue:', targetIssue.title);
-				break;
+				// If flag for skip syncing labelled issues is set, check if issue has label of specified sync type
+				if (SKIP_SYNC_ON_LABEL && issue.labels.find((label: Label) => label.name === SKIP_SYNC_ON_LABEL)) {
+					console.log('Skipping sync for issue with label', SKIP_SYNC_ON_LABEL);
+					return;
+				}
 
+				// If flag for only syncing labelled issues is set, check if issue has label of specified sync type
+				if (ONLY_SYNC_ON_LABEL && !issue.labels.find((label: Label) => label.name === ONLY_SYNC_ON_LABEL)) {
+					console.log('Skipping sync for issue without label', ONLY_SYNC_ON_LABEL);
+					return;
+				}
+
+				// Add "to-sync" label to issue to prevent multiple syncs
+				await octokit_source.request('POST /repos/{owner}/{repo}/issues/{issue_number}/labels', {
+					owner: owner_source,
+					repo: repo_source,
+					issue_number: number,
+					labels: ['to-sync'],
+				});
+				break;
 			default:
 				console.log('We are currently not handling events of type ' + payload.action);
 				break;
 		}
-
-		// Remove "syncing" label
-		await octokit_source.request('DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels/{name}', {
-			owner: owner_source,
-			repo: repo_source,
-			issue_number: number,
-			name: 'syncing',
-		});
-	});
+	} catch (error) {
+		core.setFailed(error.message);
+	}
+})();

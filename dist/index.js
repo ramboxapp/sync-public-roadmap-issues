@@ -39978,7 +39978,6 @@ const octokit_target = new octokit_1.Octokit({
     auth: target_pat,
     baseUrl: `https://${target_url}`,
 });
-console.log(process.env);
 (() => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield labelSyncer_1.LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source, owner_target, repo_target);
@@ -39989,6 +39988,7 @@ console.log(process.env);
         switch (process.env.GITHUB_EVENT_NAME) {
             case 'workflow_dispatch':
             case 'schedule':
+                console.log('Syncing all issues with label "to-sync"...');
                 // Retrieve issue by owner, repo and number from octokit_source
                 const search = yield octokit_source.paginate('GET /repos/{owner}/{repo}/issues', {
                     owner: 'ramboxapp',
@@ -40024,7 +40024,9 @@ console.log(process.env);
                             body: issue.body,
                             // state: issue.state,
                             milestone: targetMilestone === null || targetMilestone === void 0 ? void 0 : targetMilestone.number,
-                            labels: issue.labels.map((label) => label.name) || [''],
+                            labels: issue.labels.filter((label) => label.name !== 'to-sync').map((label) => label.name) || [
+                                '',
+                            ],
                             assignees: issue.assignees.map((assignee) => assignee.login) || null,
                         });
                         console.log('Updated issue:', targetIssue.title);
@@ -40059,6 +40061,7 @@ console.log(process.env);
                 }
                 break;
             case 'issues':
+                console.log('Finding the issue...');
                 // Retrieve issue by owner, repo and number from octokit_source
                 const number = (payload.issue || payload.pull_request || payload).number;
                 const { data: issue } = yield octokit_source.request('GET /repos/{owner}/{repo}/issues/{number}', {
@@ -40066,6 +40069,7 @@ console.log(process.env);
                     repo: repo_source,
                     number: number,
                 });
+                console.log('Issue found:', issue.title);
                 // Remove the target issue if the source issue was demilestoned or has no milestone
                 if (payload.action === 'demilestoned' || issue.milestone === null) {
                     // Find issue number from target repo by sub-issue id
@@ -40100,6 +40104,7 @@ console.log(process.env);
                     return;
                 }
                 // Add "to-sync" label to issue to prevent multiple syncs
+                console.log('Adding "to-sync" label to issue...');
                 yield octokit_source.request('POST /repos/{owner}/{repo}/issues/{issue_number}/labels', {
                     owner: owner_source,
                     repo: repo_source,
@@ -40111,6 +40116,7 @@ console.log(process.env);
                 console.log('We are currently not handling events of type ' + payload.action);
                 break;
         }
+        console.log('Successfully synced issues');
     }
     catch (error) {
         core.setFailed(error.message);

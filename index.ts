@@ -79,8 +79,6 @@ const octokit_target = new Octokit({
 	baseUrl: `https://${target_url}`,
 });
 
-console.log(process.env);
-
 (async () => {
 	try {
 		await LabelSyncer.syncLabels(octokit_source, octokit_target, owner_source, repo_source, owner_target, repo_target);
@@ -92,6 +90,7 @@ console.log(process.env);
 		switch (process.env.GITHUB_EVENT_NAME) {
 			case 'workflow_dispatch':
 			case 'schedule':
+				console.log('Syncing all issues with label "to-sync"...');
 				// Retrieve issue by owner, repo and number from octokit_source
 				const search = await octokit_source.paginate('GET /repos/{owner}/{repo}/issues', {
 					owner: 'ramboxapp',
@@ -134,7 +133,9 @@ console.log(process.env);
 							body: issue.body,
 							// state: issue.state,
 							milestone: targetMilestone?.number,
-							labels: issue.labels.map((label: Label) => label.name) || [''],
+							labels: issue.labels.filter((label: Label) => label.name !== 'to-sync').map((label: Label) => label.name) || [
+								'',
+							],
 							assignees: issue.assignees.map((assignee: Assignee) => assignee.login) || null,
 						});
 						console.log('Updated issue:', targetIssue.title);
@@ -172,6 +173,7 @@ console.log(process.env);
 
 				break;
 			case 'issues':
+				console.log('Finding the issue...');
 				// Retrieve issue by owner, repo and number from octokit_source
 				const number = (payload.issue || payload.pull_request || payload).number;
 				const { data: issue } = await octokit_source.request('GET /repos/{owner}/{repo}/issues/{number}', {
@@ -179,6 +181,8 @@ console.log(process.env);
 					repo: repo_source,
 					number: number,
 				});
+
+				console.log('Issue found:', issue.title);
 
 				// Remove the target issue if the source issue was demilestoned or has no milestone
 				if (payload.action === 'demilestoned' || issue.milestone === null) {
@@ -220,6 +224,7 @@ console.log(process.env);
 				}
 
 				// Add "to-sync" label to issue to prevent multiple syncs
+				console.log('Adding "to-sync" label to issue...');
 				await octokit_source.request('POST /repos/{owner}/{repo}/issues/{issue_number}/labels', {
 					owner: owner_source,
 					repo: repo_source,
@@ -231,6 +236,7 @@ console.log(process.env);
 				console.log('We are currently not handling events of type ' + payload.action);
 				break;
 		}
+		console.log('Successfully synced issues');
 	} catch (error) {
 		core.setFailed(error.message);
 	}

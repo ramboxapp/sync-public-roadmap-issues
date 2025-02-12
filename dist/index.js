@@ -40121,6 +40121,7 @@ const octokit_target = new octokit_1.Octokit({
         console.log('Successfully synced issues');
     }
     catch (error) {
+        console.error(error);
         core.setFailed(error.message);
     }
 }))();

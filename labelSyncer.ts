@@ -44,8 +44,8 @@ export class LabelSyncer {
 								targetRepoLabels
 									// Match by name and description, as IDs may vary across repos
 									.find(
-										(targetEntry) => targetEntry.name == label.name && targetEntry.description == label.description
-									) == undefined
+										(targetEntry) => targetEntry.name == label.name
+									) === undefined
 						);
 
 						// Create delta of missing issues in target

@@ -102,6 +102,8 @@ const octokit_target = new Octokit({
 					direction: 'desc',
 				});
 
+				console.log('Found issues:', search.length);
+
 				// Find milestone id from target repo
 				const { data: targetMilestones } = await octokit_target.request('GET /repos/{owner}/{repo}/milestones', {
 					owner: owner_target,
@@ -110,6 +112,7 @@ const octokit_target = new Octokit({
 				});
 
 				for (const issue of search) {
+					console.log('Syncing issue:', issue.title);
 					const targetMilestone = targetMilestones.find((targetMilestone) => targetMilestone.title === issue.milestone.title);
 
 					// Find issue number from target repo by sub-issue id

@@ -95,6 +95,7 @@ const octokit_target = new Octokit({
 				const search = await octokit_source.paginate('GET /repos/{owner}/{repo}/issues', {
 					owner: 'ramboxapp',
 					repo: 'project-management',
+					state: 'all',
 					per_page: 100,
 					milestone: '*',
 					labels: 'to-sync',

@@ -39993,6 +39993,7 @@ const octokit_target = new octokit_1.Octokit({
                 const search = yield octokit_source.paginate('GET /repos/{owner}/{repo}/issues', {
                     owner: 'ramboxapp',
                     repo: 'project-management',
+                    state: 'all',
                     per_page: 100,
                     milestone: '*',
                     labels: 'to-sync',

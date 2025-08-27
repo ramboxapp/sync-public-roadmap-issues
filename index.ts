@@ -135,7 +135,7 @@ const octokit_target = new Octokit({
 							issue_number: targetIssue.number,
 							title: issue.title,
 							body: issue.body,
-							// state: issue.state,
+							state: issue.state as 'open' | 'closed',
 							milestone: targetMilestone?.number,
 							labels: issue.labels.filter((label: Label) => label.name !== 'to-sync').map((label: Label) => label.name) || [
 								'',
